@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/hashicorp-demoapp/hashicups-client-go"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
@@ -15,8 +16,9 @@ import (
 
 // Ensure the implementation satisfies the expected interfaces.
 var (
-	_ resource.Resource              = &orderResource{}
-	_ resource.ResourceWithConfigure = &orderResource{}
+	_ resource.Resource                = &orderResource{}
+	_ resource.ResourceWithConfigure   = &orderResource{}
+	_ resource.ResourceWithImportState = &orderResource{}
 )
 
 // NewOrderResource is a helper function to simplify the provider implementation.
@@ -249,8 +251,24 @@ func (r *orderResource) Update(ctx context.Context, req resource.UpdateRequest, 
 	}
 }
 
-// Delete deletes the resource and removes the Terraform state on success.
 func (r *orderResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
+	// Retrieve values from state
+	var state orderResourceModel
+	diags := req.State.Get(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// Delete existing order
+	err := r.client.DeleteOrder(state.ID.ValueString())
+	if err != nil {
+		resp.Diagnostics.AddError(
+			"Error Deleting HashiCups Order",
+			"Could not delete order, unexpected error: "+err.Error(),
+		)
+		return
+	}
 }
 
 func (r *orderResource) Configure(_ context.Context, req resource.ConfigureRequest, _ *resource.ConfigureResponse) {
@@ -282,4 +300,9 @@ type orderItemCoffeeModel struct {
 	Description types.String  `tfsdk:"description"`
 	Price       types.Float64 `tfsdk:"price"`
 	Image       types.String  `tfsdk:"image"`
+}
+
+func (r *orderResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	// Retrieve import ID and save to id attribute
+	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
